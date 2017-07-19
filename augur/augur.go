@@ -81,6 +81,12 @@ func (a *Augur) Compile(path string) (*Package, error) {
 }
 
 func (a *Augur) compile(path string, pkg *Package) error {
+	if path == "unsafe" {
+		pkg.Package = types.Unsafe
+		a.Packages[path] = pkg
+		return nil
+	}
+
 	var err error
 	pkg.Build, err = a.build.Import(path, ".", 0)
 	if err != nil {
