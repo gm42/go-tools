@@ -58,22 +58,22 @@ func (a *Augur) Import(path string) (*types.Package, error) {
 func (a *Augur) ImportFrom(path, srcDir string, mode types.ImportMode) (*types.Package, error) {
 	// FIXME(dh): support vendoring
 	pkg, ok := a.Packages[path]
-	if !ok {
-		return nil, errors.New("dependency not yet compiled")
+	if ok {
+		return pkg.Package, nil
 	}
-	return pkg.Package, nil
+	// FIXME(dh): don't recurse forever on circular dependencies
+	pkg, err := a.Compile(path)
+	return pkg.Package, err
 }
 
 func (a *Augur) Compile(path string) (*Package, error) {
-	// TODO(dh): ensure dependencies are available, recursively. the
-	// question is whether Compile should be responsible for it, or
-	// the caller of Compile.
-	//
 	// TODO(dh): support cgo preprocessing a la go/loader
 	//
 	// TODO(dh): support scoping packages to their build tags
 	//
 	// TODO(dh): rebuild reverse dependencies
+	//
+	// TODO(dh): build packages in parallel
 
 	pkg := newPackage()
 	err := a.compile(path, pkg)
