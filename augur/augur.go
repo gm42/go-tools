@@ -8,11 +8,15 @@ import (
 	"go/token"
 	"go/types"
 	"path/filepath"
+
+	"honnef.co/go/tools/ssa"
 )
 
 type Package struct {
 	*types.Package
 	*types.Info
+
+	SSA *ssa.Package
 
 	Build *build.Package
 }
@@ -35,15 +39,18 @@ type Augur struct {
 	Fset *token.FileSet
 	// Packages maps import paths to type-checked packages.
 	Packages map[string]*Package
+	SSA      *ssa.Program
 
 	checker *types.Config
 	build   build.Context
 }
 
 func NewAugur() *Augur {
+	fset := token.NewFileSet()
 	a := &Augur{
-		Fset:     token.NewFileSet(),
+		Fset:     fset,
 		Packages: map[string]*Package{},
+		SSA:      ssa.NewProgram(fset, ssa.GlobalDebug),
 		checker:  &types.Config{},
 		build:    build.Default,
 	}
@@ -112,5 +119,8 @@ func (a *Augur) compile(path string, pkg *Package) error {
 		return err
 	}
 	a.Packages[path] = pkg
+	pkg.SSA = a.SSA.CreatePackage(pkg.Package, files, pkg.Info, true)
+	pkg.SSA.Build()
+
 	return nil
 }
