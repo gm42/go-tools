@@ -237,6 +237,60 @@ func (prog *Program) CreatePackage(pkg *types.Package, files []*ast.File, info *
 	return p
 }
 
+func (prog *Program) RemovePackage(p *Package) {
+	delete(prog.imported, p.Pkg.Path())
+	delete(prog.packages, p.Pkg)
+
+	// OPT(dh): blowing away the whole method set cache every time we
+	// remove a package will negatively impact performance. We may
+	// want to fork typeutil and implement our own cache that allows
+	// removing types.
+	prog.MethodSets = typeutil.MethodSetCache{}
+
+	var fn func(*types.Scope)
+	fn = func(scope *types.Scope) {
+		// OPT(dh): Names allocates memory. It would be more efficient
+		// if we could loop directly over the elems map in Scope.
+		for _, name := range scope.Names() {
+			obj := scope.Lookup(name)
+			if obj, ok := obj.(*types.TypeName); ok {
+				ptr := types.NewPointer(obj.Type())
+				prog.methodSets.Delete(obj.Type())
+				prog.methodSets.Delete(ptr)
+
+				prog.runtimeTypes.Delete(obj.Type())
+				prog.runtimeTypes.Delete(ptr)
+
+				prog.canon.Delete(obj.Type())
+				prog.canon.Delete(ptr)
+			}
+		}
+		for i := 0; i < scope.NumChildren(); i++ {
+			fn(scope.Child(i))
+		}
+	}
+	prog.methodsMu.Lock()
+	fn(p.Pkg.Scope())
+
+	// OPT(dh): this may end up being too inefficient when having a
+	// lot of packages loaded. we may need a per-package lookup table.
+	for key := range prog.thunks {
+		// delete selectors residing in the deleted package. We don't
+		// need to delete selectors referring to a receiver in the
+		// deleted package, because all dependent packages will also
+		// be removed.
+		if key.obj.Pkg() == p.Pkg {
+			delete(prog.thunks, key)
+		}
+	}
+	for key := range prog.bounds {
+		if key.Pkg() == p.Pkg {
+			delete(prog.bounds, key)
+		}
+	}
+	prog.methodsMu.Unlock()
+}
+
 // printMu serializes printing of Packages/Functions to stdout.
 var printMu sync.Mutex
 
