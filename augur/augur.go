@@ -7,10 +7,18 @@ import (
 	"go/parser"
 	"go/token"
 	"go/types"
+	"log"
 	"path/filepath"
 
 	"honnef.co/go/tools/ssa"
 )
+
+// FIXME(dh): when we reparse a package, new files get added to the
+// FileSet. There is, however, no way of removing files from the
+// FileSet, so it grows forever, leaking memory.
+
+// FIXME(dh): go/ssa uses typeutil.Hasher, which grows monotonically –
+// i.e. leaks memory over time.
 
 type Package struct {
 	*types.Package
@@ -19,6 +27,11 @@ type Package struct {
 	SSA *ssa.Package
 
 	Build *build.Package
+
+	Dependencies        map[string]struct{}
+	ReverseDependencies map[string]struct{}
+
+	dirty bool
 }
 
 func newPackage() *Package {
@@ -32,6 +45,8 @@ func newPackage() *Package {
 			Scopes:     map[ast.Node]*types.Scope{},
 			InitOrder:  []*types.Initializer{},
 		},
+		Dependencies:        map[string]struct{}{},
+		ReverseDependencies: map[string]struct{}{},
 	}
 }
 
@@ -73,24 +88,66 @@ func (a *Augur) ImportFrom(path, srcDir string, mode types.ImportMode) (*types.P
 	return pkg.Package, err
 }
 
+func (a *Augur) Package(path string) (*Package, bool) {
+	pkg, ok := a.Packages[path]
+	return pkg, ok
+}
+
 func (a *Augur) Compile(path string) (*Package, error) {
 	// TODO(dh): support cgo preprocessing a la go/loader
 	//
 	// TODO(dh): support scoping packages to their build tags
 	//
-	// TODO(dh): rebuild reverse dependencies
-	//
 	// TODO(dh): build packages in parallel
+	//
+	// TODO(dh): don't recompile up to date packages
+	//
+	// TODO(dh): remove stale reverse dependencies
 
 	pkg := newPackage()
+	old, ok := a.Package(path)
+	if ok {
+		pkg.ReverseDependencies = old.ReverseDependencies
+	}
 	err := a.compile(path, pkg)
+	if err != nil {
+		return nil, err
+	}
+
+	err = a.recompileDirtyPackages()
 	return pkg, err
 }
 
+func (a *Augur) markDirty(pkg *Package) {
+	pkg.dirty = true
+	for rdep := range pkg.ReverseDependencies {
+		rpkg, ok := a.Package(rdep)
+		if !ok {
+			panic("internal inconsistency: couldn't find reverse dependency")
+		}
+		a.markDirty(rpkg)
+	}
+}
+
+func (a *Augur) recompileDirtyPackages() error {
+	for path, pkg := range a.Packages {
+		if pkg.dirty {
+			_, err := a.Compile(path)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 func (a *Augur) compile(path string, pkg *Package) error {
+	log.Println("compiling", path)
+	a.markDirty(pkg)
 	if path == "unsafe" {
 		pkg.Package = types.Unsafe
 		a.Packages[path] = pkg
+		pkg.dirty = false
 		return nil
 	}
 
@@ -118,9 +175,21 @@ func (a *Augur) compile(path string, pkg *Package) error {
 	if err != nil {
 		return err
 	}
+	prev := a.Packages[path]
 	a.Packages[path] = pkg
+	if prev != nil {
+		a.SSA.RemovePackage(prev.SSA)
+	}
 	pkg.SSA = a.SSA.CreatePackage(pkg.Package, files, pkg.Info, true)
 	pkg.SSA.Build()
 
+	for _, imp := range pkg.Build.Imports {
+		// FIXME(dh): support vendoring
+		dep, _ := a.Package(imp)
+		pkg.Dependencies[dep.Path()] = struct{}{}
+		dep.ReverseDependencies[pkg.Path()] = struct{}{}
+	}
+
+	pkg.dirty = false
 	return nil
 }
