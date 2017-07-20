@@ -80,7 +80,7 @@ func (a *Augur) Import(path string) (*types.Package, error) {
 func (a *Augur) ImportFrom(path, srcDir string, mode types.ImportMode) (*types.Package, error) {
 	// FIXME(dh): support vendoring
 	pkg, ok := a.Packages[path]
-	if ok {
+	if ok && !pkg.dirty {
 		return pkg.Package, nil
 	}
 	// FIXME(dh): don't recurse forever on circular dependencies
@@ -114,8 +114,7 @@ func (a *Augur) Compile(path string) (*Package, error) {
 		return nil, err
 	}
 
-	err = a.recompileDirtyPackages()
-	return pkg, err
+	return pkg, nil
 }
 
 func (a *Augur) markDirty(pkg *Package) {
@@ -129,13 +128,14 @@ func (a *Augur) markDirty(pkg *Package) {
 	}
 }
 
-func (a *Augur) recompileDirtyPackages() error {
+func (a *Augur) RecompileDirtyPackages() error {
 	for path, pkg := range a.Packages {
-		if pkg.dirty {
-			_, err := a.Compile(path)
-			if err != nil {
-				return err
-			}
+		if !pkg.dirty {
+			continue
+		}
+		_, err := a.Compile(path)
+		if err != nil {
+			return err
 		}
 	}
 	return nil
@@ -143,6 +143,9 @@ func (a *Augur) recompileDirtyPackages() error {
 
 func (a *Augur) compile(path string, pkg *Package) error {
 	log.Println("compiling", path)
+	// OPT(dh): when compile gets called while rebuilding dirty
+	// packages, it is unnecessary to call markDirty. in fact, this
+	// causes exponential complexity.
 	a.markDirty(pkg)
 	if path == "unsafe" {
 		pkg.Package = types.Unsafe
@@ -185,11 +188,15 @@ func (a *Augur) compile(path string, pkg *Package) error {
 
 	for _, imp := range pkg.Build.Imports {
 		// FIXME(dh): support vendoring
-		dep, _ := a.Package(imp)
+		dep, ok := a.Package(imp)
+		if !ok {
+			panic("internal error: couldn't find dependency")
+		}
 		pkg.Dependencies[dep.Path()] = struct{}{}
 		dep.ReverseDependencies[pkg.Path()] = struct{}{}
 	}
 
 	pkg.dirty = false
+	log.Println("\tcompiled", path)
 	return nil
 }
