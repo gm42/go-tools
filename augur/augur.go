@@ -24,8 +24,8 @@ type Package struct {
 	*types.Package
 	*types.Info
 
-	SSA *ssa.Package
-
+	Files []*ast.File
+	SSA   *ssa.Package
 	Build *build.Package
 
 	Dependencies        map[string]struct{}
@@ -163,7 +163,7 @@ func (a *Augur) compile(path string, pkg *Package) error {
 		return errors.New("cgo is not currently supported")
 	}
 
-	var files []*ast.File
+	pkg.Files = nil
 	for _, f := range pkg.Build.GoFiles {
 		// TODO(dh): cache parsed files and only reparse them if
 		// necessary
@@ -171,10 +171,10 @@ func (a *Augur) compile(path string, pkg *Package) error {
 		if err != nil {
 			return err
 		}
-		files = append(files, af)
+		pkg.Files = append(pkg.Files, af)
 	}
 
-	pkg.Package, err = a.checker.Check(path, a.Fset, files, pkg.Info)
+	pkg.Package, err = a.checker.Check(path, a.Fset, pkg.Files, pkg.Info)
 	if err != nil {
 		return err
 	}
@@ -183,7 +183,7 @@ func (a *Augur) compile(path string, pkg *Package) error {
 	if prev != nil {
 		a.SSA.RemovePackage(prev.SSA)
 	}
-	pkg.SSA = a.SSA.CreatePackage(pkg.Package, files, pkg.Info, true)
+	pkg.SSA = a.SSA.CreatePackage(pkg.Package, pkg.Files, pkg.Info, true)
 	pkg.SSA.Build()
 
 	for _, imp := range pkg.Build.Imports {
