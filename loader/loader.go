@@ -142,7 +142,11 @@ func (a *Program) markDirty(pkg *Package) {
 		a.SSA.RemovePackage(pkg.SSA)
 	}
 	for rdep := range pkg.ReverseDependencies {
-		a.markDirty(a.Package(rdep))
+		// the package might not be cached yet if we're currently
+		// importing its dependencies
+		if rpkg := a.Package(rdep); rpkg != nil {
+			a.markDirty(rpkg)
+		}
 	}
 }
 
