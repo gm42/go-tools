@@ -103,6 +103,9 @@ func (a *Augur) ImportFrom(path, srcDir string, mode types.ImportMode) (*types.P
 	}
 	// FIXME(dh): don't recurse forever on circular dependencies
 	pkg, err := a.compile(path)
+	if err != nil {
+		return nil, err
+	}
 	return pkg.Package, err
 }
 
