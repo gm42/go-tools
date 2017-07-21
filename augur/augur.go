@@ -26,7 +26,6 @@ type Package struct {
 
 	Files []*ast.File
 	SSA   *ssa.Package
-	Build *build.Package
 
 	Dependencies        map[string]struct{}
 	ReverseDependencies map[string]struct{}
@@ -168,19 +167,19 @@ func (a *Augur) compile(path string) (*Package, error) {
 	}
 
 	var err error
-	pkg.Build, err = a.Build.Import(path, ".", 0)
+	build, err := a.Build.Import(path, ".", 0)
 	if err != nil {
 		return nil, err
 	}
-	if len(pkg.Build.CgoFiles) != 0 {
+	if len(build.CgoFiles) != 0 {
 		return nil, errors.New("cgo is not currently supported")
 	}
 
 	pkg.Files = nil
-	for _, f := range pkg.Build.GoFiles {
+	for _, f := range build.GoFiles {
 		// TODO(dh): cache parsed files and only reparse them if
 		// necessary
-		af, err := parser.ParseFile(a.Fset, filepath.Join(pkg.Build.Dir, f), nil, parser.ParseComments)
+		af, err := parser.ParseFile(a.Fset, filepath.Join(build.Dir, f), nil, parser.ParseComments)
 		if err != nil {
 			return nil, err
 		}
@@ -199,7 +198,7 @@ func (a *Augur) compile(path string) (*Package, error) {
 	pkg.SSA = a.SSA.CreatePackage(pkg.Package, pkg.Files, pkg.Info, true)
 	pkg.SSA.Build()
 
-	for _, imp := range pkg.Build.Imports {
+	for _, imp := range build.Imports {
 		// FIXME(dh): support vendoring
 		dep := a.Package(imp)
 		pkg.Dependencies[dep.Path()] = struct{}{}
