@@ -18,8 +18,8 @@ import (
 	"strconv"
 	"strings"
 
-	"honnef.co/go/tools/augur"
 	"honnef.co/go/tools/lint"
+	"honnef.co/go/tools/loader"
 
 	"github.com/kisielk/gotool"
 )
@@ -162,7 +162,7 @@ type Options struct {
 	GoVersion int
 }
 
-func Lint(c lint.Checker, pkgs []string, opt *Options) ([]lint.Problem, *augur.Augur, error) {
+func Lint(c lint.Checker, pkgs []string, opt *Options) ([]lint.Problem, *loader.Program, error) {
 	// TODO(dh): Instead of returning the loader.Program, we should
 	// store token.Position instead of token.Pos in lint.Problem.
 	if opt == nil {
@@ -187,7 +187,7 @@ func Lint(c lint.Checker, pkgs []string, opt *Options) ([]lint.Problem, *augur.A
 	ctx.BuildTags = runner.tags
 
 	{
-		lprog := augur.NewAugur()
+		lprog := loader.NewProgram()
 		lprog.Build = ctx
 
 		if goFiles {
@@ -239,7 +239,7 @@ func ProcessArgs(name string, c lint.Checker, args []string) {
 	ProcessFlagSet(c, flags)
 }
 
-func (runner *runner) lint(lprog *augur.Augur) []lint.Problem {
+func (runner *runner) lint(lprog *loader.Program) []lint.Problem {
 	l := &lint.Linter{
 		Checker:   runner.checker,
 		Ignores:   runner.ignores,

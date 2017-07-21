@@ -20,8 +20,8 @@ import (
 	"strings"
 	"testing"
 
-	"honnef.co/go/tools/augur"
 	"honnef.co/go/tools/lint"
+	"honnef.co/go/tools/loader"
 )
 
 var lintMatch = flag.String("lint.match", "", "restrict testdata matches to this pattern")
@@ -62,7 +62,7 @@ func TestAll(t *testing.T, c lint.Checker, dir string) {
 		files[v] = append(files[v], fi)
 	}
 
-	lprog := augur.NewAugur()
+	lprog := loader.NewProgram()
 
 	sources := map[string][]byte{}
 	for _, fi := range fis {

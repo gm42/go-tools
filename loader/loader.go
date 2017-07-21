@@ -1,4 +1,4 @@
-package augur
+package loader
 
 import (
 	"errors"
@@ -33,12 +33,12 @@ type Package struct {
 
 	Explicit bool
 
-	Program *Augur
+	Program *Program
 
 	dirty bool
 }
 
-func (a *Augur) newPackage() *Package {
+func (a *Program) newPackage() *Package {
 	return &Package{
 		Info: &types.Info{
 			Types:      map[ast.Expr]types.TypeAndValue{},
@@ -55,7 +55,7 @@ func (a *Augur) newPackage() *Package {
 	}
 }
 
-type Augur struct {
+type Program struct {
 	Fset *token.FileSet
 	// Packages maps import paths to type-checked packages.
 	Packages map[string]*Package
@@ -67,9 +67,9 @@ type Augur struct {
 	logDepth int
 }
 
-func NewAugur() *Augur {
+func NewProgram() *Program {
 	fset := token.NewFileSet()
-	a := &Augur{
+	a := &Program{
 		Fset:     fset,
 		Packages: map[string]*Package{},
 		SSA:      ssa.NewProgram(fset, ssa.GlobalDebug),
@@ -80,7 +80,7 @@ func NewAugur() *Augur {
 	return a
 }
 
-func (a *Augur) InitialPackages() []*Package {
+func (a *Program) InitialPackages() []*Package {
 	// TODO(dh): rename to ExplicitPackages
 	var pkgs []*Package
 	for _, pkg := range a.Packages {
@@ -91,11 +91,11 @@ func (a *Augur) InitialPackages() []*Package {
 	return pkgs
 }
 
-func (a *Augur) Import(path string) (*types.Package, error) {
+func (a *Program) Import(path string) (*types.Package, error) {
 	return nil, nil
 }
 
-func (a *Augur) ImportFrom(path, srcDir string, mode types.ImportMode) (*types.Package, error) {
+func (a *Program) ImportFrom(path, srcDir string, mode types.ImportMode) (*types.Package, error) {
 	bpkg, err := a.Build.Import(path, srcDir, 0)
 	if err != nil {
 		return nil, err
@@ -113,11 +113,11 @@ func (a *Augur) ImportFrom(path, srcDir string, mode types.ImportMode) (*types.P
 	return pkg.Package, nil
 }
 
-func (a *Augur) Package(path string) *Package {
+func (a *Program) Package(path string) *Package {
 	return a.Packages[path]
 }
 
-func (a *Augur) Compile(path string) (*Package, error) {
+func (a *Program) Compile(path string) (*Package, error) {
 	// TODO(dh): support cgo preprocessing a la go/loader
 	//
 	// TODO(dh): support scoping packages to their build tags
@@ -136,7 +136,7 @@ func (a *Augur) Compile(path string) (*Package, error) {
 	return pkg, nil
 }
 
-func (a *Augur) markDirty(pkg *Package) {
+func (a *Program) markDirty(pkg *Package) {
 	pkg.dirty = true
 	if pkg.SSA != nil {
 		a.SSA.RemovePackage(pkg.SSA)
@@ -146,7 +146,7 @@ func (a *Augur) markDirty(pkg *Package) {
 	}
 }
 
-func (a *Augur) RecompileDirtyPackages() error {
+func (a *Program) RecompileDirtyPackages() error {
 	for path, pkg := range a.Packages {
 		if !pkg.dirty {
 			continue
@@ -159,7 +159,7 @@ func (a *Augur) RecompileDirtyPackages() error {
 	return nil
 }
 
-func (a *Augur) compile(path string, srcdir string) (*Package, error) {
+func (a *Program) compile(path string, srcdir string) (*Package, error) {
 	a.logDepth++
 	defer func() { a.logDepth-- }()
 	pkg := a.newPackage()

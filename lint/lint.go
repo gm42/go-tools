@@ -21,7 +21,7 @@ import (
 	"strings"
 	"sync"
 
-	"honnef.co/go/tools/augur"
+	"honnef.co/go/tools/loader"
 	"honnef.co/go/tools/ssa"
 	"honnef.co/go/tools/ssa/ssautil"
 
@@ -42,9 +42,9 @@ type Ignore struct {
 
 type Program struct {
 	SSA  *ssa.Program
-	Prog *augur.Augur
+	Prog *loader.Program
 	// TODO(dh): Rename to InitialPackages?
-	Packages         []*augur.Package
+	Packages         []*loader.Package
 	InitialFunctions []*ssa.Function
 	AllFunctions     []*ssa.Function
 	Files            []*ast.File
@@ -52,7 +52,7 @@ type Program struct {
 	GoVersion        int
 
 	tokenFileMap map[*token.File]*ast.File
-	astFileMap   map[*ast.File]*augur.Package
+	astFileMap   map[*ast.File]*loader.Package
 }
 
 type Func func(*Job)
@@ -136,7 +136,7 @@ func (ps byPosition) Swap(i int, j int) {
 	ps.ps[i], ps.ps[j] = ps.ps[j], ps.ps[i]
 }
 
-func (l *Linter) Lint(lprog *augur.Augur) []Problem {
+func (l *Linter) Lint(lprog *loader.Program) []Problem {
 	ssaprog := lprog.SSA
 	pkgs := lprog.InitialPackages()
 	prog := &Program{
@@ -146,7 +146,7 @@ func (l *Linter) Lint(lprog *augur.Augur) []Problem {
 		Info:         &types.Info{},
 		GoVersion:    l.GoVersion,
 		tokenFileMap: map[*token.File]*ast.File{},
-		astFileMap:   map[*ast.File]*augur.Package{},
+		astFileMap:   map[*ast.File]*loader.Package{},
 	}
 	initial := map[*types.Package]struct{}{}
 	for _, pkg := range pkgs {
@@ -390,7 +390,7 @@ func (j *Job) ExprToString(expr ast.Expr) (string, bool) {
 	return constant.StringVal(val), true
 }
 
-func (j *Job) NodePackage(node Positioner) *augur.Package {
+func (j *Job) NodePackage(node Positioner) *loader.Package {
 	f := j.File(node)
 	return j.Program.astFileMap[f]
 }
@@ -462,7 +462,7 @@ func FilterDebug(instr []ssa.Instruction) []ssa.Instruction {
 	return out
 }
 
-func NodeFns(pkgs []*augur.Package) map[ast.Node]*ssa.Function {
+func NodeFns(pkgs []*loader.Package) map[ast.Node]*ssa.Function {
 	out := map[ast.Node]*ssa.Function{}
 
 	wg := &sync.WaitGroup{}
@@ -495,7 +495,7 @@ func NodeFns(pkgs []*augur.Package) map[ast.Node]*ssa.Function {
 
 type globalVisitor struct {
 	m   map[ast.Node]*ssa.Function
-	pkg *augur.Package
+	pkg *loader.Package
 	f   *ast.File
 }
 
@@ -515,7 +515,7 @@ func (v *globalVisitor) Visit(node ast.Node) ast.Visitor {
 type fnVisitor struct {
 	m     map[ast.Node]*ssa.Function
 	f     *ast.File
-	pkg   *augur.Package
+	pkg   *loader.Package
 	ssafn *ssa.Function
 }
 
