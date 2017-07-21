@@ -96,17 +96,21 @@ func (a *Augur) Import(path string) (*types.Package, error) {
 }
 
 func (a *Augur) ImportFrom(path, srcDir string, mode types.ImportMode) (*types.Package, error) {
-	// FIXME(dh): support vendoring
-	pkg, ok := a.Packages[path]
-	if ok && !pkg.dirty {
-		return pkg.Package, nil
-	}
-	// FIXME(dh): don't recurse forever on circular dependencies
-	pkg, err := a.compile(path)
+	bpkg, err := a.Build.Import(path, srcDir, 0)
 	if err != nil {
 		return nil, err
 	}
-	return pkg.Package, err
+
+	if pkg, ok := a.Packages[bpkg.ImportPath]; ok && !pkg.dirty {
+		return pkg.Package, nil
+	}
+	// FIXME(dh): don't recurse forever on circular dependencies
+	pkg, err := a.compile(path, srcDir)
+	if err != nil {
+		return nil, err
+	}
+	a.Packages[bpkg.ImportPath] = pkg
+	return pkg.Package, nil
 }
 
 func (a *Augur) Package(path string) *Package {
@@ -124,7 +128,7 @@ func (a *Augur) Compile(path string) (*Package, error) {
 	//
 	// TODO(dh): remove stale reverse dependencies
 
-	pkg, err := a.compile(path)
+	pkg, err := a.compile(path, ".")
 	if err != nil {
 		return nil, err
 	}
@@ -147,7 +151,7 @@ func (a *Augur) RecompileDirtyPackages() error {
 		if !pkg.dirty {
 			continue
 		}
-		_, err := a.compile(path)
+		_, err := a.compile(path, ".")
 		if err != nil {
 			return err
 		}
@@ -155,7 +159,7 @@ func (a *Augur) RecompileDirtyPackages() error {
 	return nil
 }
 
-func (a *Augur) compile(path string) (*Package, error) {
+func (a *Augur) compile(path string, srcdir string) (*Package, error) {
 	a.logDepth++
 	defer func() { a.logDepth-- }()
 	pkg := a.newPackage()
@@ -171,7 +175,6 @@ func (a *Augur) compile(path string) (*Package, error) {
 	// causes exponential complexity.
 	if path == "unsafe" {
 		pkg.Package = types.Unsafe
-		a.Packages[path] = pkg
 		pkg.dirty = false
 		return pkg, nil
 	}
@@ -179,7 +182,7 @@ func (a *Augur) compile(path string) (*Package, error) {
 	a.markDirty(pkg)
 
 	var err error
-	build, err := a.Build.Import(path, ".", 0)
+	build, err := a.Build.Import(path, srcdir, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -202,15 +205,20 @@ func (a *Augur) compile(path string) (*Package, error) {
 	if err != nil {
 		return nil, err
 	}
-	a.Packages[path] = pkg
 	pkg.SSA = a.SSA.CreatePackage(pkg.Package, pkg.Files, pkg.Info, true)
 	pkg.SSA.Build()
 
-	for _, imp := range pkg.Package.Imports() {
-		// FIXME(dh): support vendoring
-		dep := a.Package(imp.Path())
-		pkg.Dependencies[dep.Path()] = struct{}{}
-		dep.ReverseDependencies[pkg.Path()] = struct{}{}
+	for _, imp := range build.Imports {
+		// OPT(dh): we're duplicating a lot of go/build lookups
+		// between here and ImportFrom. Maybe we can cache them.
+		bdep, err := a.Build.Import(imp, build.Dir, 0)
+		if err != nil {
+			// shouldn't happen
+			return nil, err
+		}
+		dep := a.Package(bdep.ImportPath)
+		pkg.Dependencies[bdep.ImportPath] = struct{}{}
+		dep.ReverseDependencies[build.ImportPath] = struct{}{}
 	}
 
 	pkg.dirty = false
