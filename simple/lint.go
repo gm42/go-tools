@@ -1700,7 +1700,7 @@ func (c *Checker) Implements(j *lint.Job, typ types.Type, iface string) bool {
 		if pkg == nil {
 			return false
 		}
-		scope = pkg.Pkg.Scope()
+		scope = pkg.Scope()
 		ifaceName = iface[idx+1:]
 	}
 

@@ -12,17 +12,16 @@ import (
 	"flag"
 	"fmt"
 	"go/build"
-	"go/parser"
 	"go/token"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 
+	"honnef.co/go/tools/augur"
 	"honnef.co/go/tools/lint"
 
 	"github.com/kisielk/gotool"
-	"golang.org/x/tools/go/loader"
 )
 
 func usage(name string, flags *flag.FlagSet) func() {
@@ -163,7 +162,7 @@ type Options struct {
 	GoVersion int
 }
 
-func Lint(c lint.Checker, pkgs []string, opt *Options) ([]lint.Problem, *loader.Program, error) {
+func Lint(c lint.Checker, pkgs []string, opt *Options) ([]lint.Problem, *augur.Augur, error) {
 	// TODO(dh): Instead of returning the loader.Program, we should
 	// store token.Position instead of token.Pos in lint.Problem.
 	if opt == nil {
@@ -186,23 +185,26 @@ func Lint(c lint.Checker, pkgs []string, opt *Options) ([]lint.Problem, *loader.
 	}
 	ctx := build.Default
 	ctx.BuildTags = runner.tags
-	conf := &loader.Config{
-		Build:      &ctx,
-		ParserMode: parser.ParseComments,
-		ImportPkgs: map[string]bool{},
-	}
-	if goFiles {
-		conf.CreateFromFilenames("adhoc", paths...)
-	} else {
-		for _, path := range paths {
-			conf.ImportPkgs[path] = opt.LintTests
+
+	{
+		lprog := augur.NewAugur()
+		lprog.Build = ctx
+
+		if goFiles {
+			// XXX support loading files
+			// lprog.CompileFiles("adhoc", paths)
+		} else {
+			for _, path := range paths {
+				_, err := lprog.Compile(path)
+				if err != nil {
+					return nil, nil, err
+				}
+				// XXX load tests
+				// conf.ImportPkgs[path] = opt.LintTests
+			}
 		}
+		return runner.lint(lprog), lprog, nil
 	}
-	lprog, err := conf.Load()
-	if err != nil {
-		return nil, nil, err
-	}
-	return runner.lint(lprog), lprog, nil
 }
 
 func shortPath(path string) string {
@@ -237,7 +239,7 @@ func ProcessArgs(name string, c lint.Checker, args []string) {
 	ProcessFlagSet(c, flags)
 }
 
-func (runner *runner) lint(lprog *loader.Program) []lint.Problem {
+func (runner *runner) lint(lprog *augur.Augur) []lint.Problem {
 	l := &lint.Linter{
 		Checker:   runner.checker,
 		Ignores:   runner.ignores,

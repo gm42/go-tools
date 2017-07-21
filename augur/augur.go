@@ -31,10 +31,14 @@ type Package struct {
 	Dependencies        map[string]struct{}
 	ReverseDependencies map[string]struct{}
 
+	Explicit bool
+
+	Program *Augur
+
 	dirty bool
 }
 
-func newPackage() *Package {
+func (a *Augur) newPackage() *Package {
 	return &Package{
 		Info: &types.Info{
 			Types:      map[ast.Expr]types.TypeAndValue{},
@@ -47,6 +51,7 @@ func newPackage() *Package {
 		},
 		Dependencies:        map[string]struct{}{},
 		ReverseDependencies: map[string]struct{}{},
+		Program:             a,
 	}
 }
 
@@ -55,9 +60,9 @@ type Augur struct {
 	// Packages maps import paths to type-checked packages.
 	Packages map[string]*Package
 	SSA      *ssa.Program
+	Build    build.Context
 
 	checker *types.Config
-	build   build.Context
 }
 
 func NewAugur() *Augur {
@@ -67,10 +72,21 @@ func NewAugur() *Augur {
 		Packages: map[string]*Package{},
 		SSA:      ssa.NewProgram(fset, ssa.GlobalDebug),
 		checker:  &types.Config{},
-		build:    build.Default,
+		Build:    build.Default,
 	}
 	a.checker.Importer = a
 	return a
+}
+
+func (a *Augur) InitialPackages() []*Package {
+	// TODO(dh): rename to ExplicitPackages
+	var pkgs []*Package
+	for _, pkg := range a.Packages {
+		if pkg.Explicit {
+			pkgs = append(pkgs, pkg)
+		}
+	}
+	return pkgs
 }
 
 func (a *Augur) Import(path string) (*types.Package, error) {
@@ -84,13 +100,12 @@ func (a *Augur) ImportFrom(path, srcDir string, mode types.ImportMode) (*types.P
 		return pkg.Package, nil
 	}
 	// FIXME(dh): don't recurse forever on circular dependencies
-	pkg, err := a.Compile(path)
+	pkg, err := a.compile(path)
 	return pkg.Package, err
 }
 
-func (a *Augur) Package(path string) (*Package, bool) {
-	pkg, ok := a.Packages[path]
-	return pkg, ok
+func (a *Augur) Package(path string) *Package {
+	return a.Packages[path]
 }
 
 func (a *Augur) Compile(path string) (*Package, error) {
@@ -104,27 +119,18 @@ func (a *Augur) Compile(path string) (*Package, error) {
 	//
 	// TODO(dh): remove stale reverse dependencies
 
-	pkg := newPackage()
-	old, ok := a.Package(path)
-	if ok {
-		pkg.ReverseDependencies = old.ReverseDependencies
-	}
-	err := a.compile(path, pkg)
+	pkg, err := a.compile(path)
 	if err != nil {
 		return nil, err
 	}
-
+	pkg.Explicit = true
 	return pkg, nil
 }
 
 func (a *Augur) markDirty(pkg *Package) {
 	pkg.dirty = true
 	for rdep := range pkg.ReverseDependencies {
-		rpkg, ok := a.Package(rdep)
-		if !ok {
-			panic("internal inconsistency: couldn't find reverse dependency")
-		}
-		a.markDirty(rpkg)
+		a.markDirty(a.Package(rdep))
 	}
 }
 
@@ -133,7 +139,7 @@ func (a *Augur) RecompileDirtyPackages() error {
 		if !pkg.dirty {
 			continue
 		}
-		_, err := a.Compile(path)
+		_, err := a.compile(path)
 		if err != nil {
 			return err
 		}
@@ -141,7 +147,14 @@ func (a *Augur) RecompileDirtyPackages() error {
 	return nil
 }
 
-func (a *Augur) compile(path string, pkg *Package) error {
+func (a *Augur) compile(path string) (*Package, error) {
+	pkg := a.newPackage()
+	old, ok := a.Packages[path]
+	if ok {
+		pkg.ReverseDependencies = old.ReverseDependencies
+		pkg.Explicit = old.Explicit
+	}
+
 	log.Println("compiling", path)
 	// OPT(dh): when compile gets called while rebuilding dirty
 	// packages, it is unnecessary to call markDirty. in fact, this
@@ -151,16 +164,16 @@ func (a *Augur) compile(path string, pkg *Package) error {
 		pkg.Package = types.Unsafe
 		a.Packages[path] = pkg
 		pkg.dirty = false
-		return nil
+		return pkg, nil
 	}
 
 	var err error
-	pkg.Build, err = a.build.Import(path, ".", 0)
+	pkg.Build, err = a.Build.Import(path, ".", 0)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if len(pkg.Build.CgoFiles) != 0 {
-		return errors.New("cgo is not currently supported")
+		return nil, errors.New("cgo is not currently supported")
 	}
 
 	pkg.Files = nil
@@ -169,14 +182,14 @@ func (a *Augur) compile(path string, pkg *Package) error {
 		// necessary
 		af, err := parser.ParseFile(a.Fset, filepath.Join(pkg.Build.Dir, f), nil, parser.ParseComments)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		pkg.Files = append(pkg.Files, af)
 	}
 
 	pkg.Package, err = a.checker.Check(path, a.Fset, pkg.Files, pkg.Info)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	prev := a.Packages[path]
 	a.Packages[path] = pkg
@@ -188,15 +201,12 @@ func (a *Augur) compile(path string, pkg *Package) error {
 
 	for _, imp := range pkg.Build.Imports {
 		// FIXME(dh): support vendoring
-		dep, ok := a.Package(imp)
-		if !ok {
-			panic("internal error: couldn't find dependency")
-		}
+		dep := a.Package(imp)
 		pkg.Dependencies[dep.Path()] = struct{}{}
 		dep.ReverseDependencies[pkg.Path()] = struct{}{}
 	}
 
 	pkg.dirty = false
 	log.Println("\tcompiled", path)
-	return nil
+	return pkg, nil
 }

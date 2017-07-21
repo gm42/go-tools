@@ -20,9 +20,8 @@ import (
 	"strings"
 	"testing"
 
+	"honnef.co/go/tools/augur"
 	"honnef.co/go/tools/lint"
-
-	"golang.org/x/tools/go/loader"
 )
 
 var lintMatch = flag.String("lint.match", "", "restrict testdata matches to this pattern")
@@ -63,9 +62,8 @@ func TestAll(t *testing.T, c lint.Checker, dir string) {
 		files[v] = append(files[v], fi)
 	}
 
-	conf := &loader.Config{
-		ParserMode: parser.ParseComments,
-	}
+	lprog := augur.NewAugur()
+
 	sources := map[string][]byte{}
 	for _, fi := range fis {
 		filename := path.Join(baseDir, fi.Name())
@@ -74,18 +72,11 @@ func TestAll(t *testing.T, c lint.Checker, dir string) {
 			t.Errorf("Failed reading %s: %v", fi.Name(), err)
 			continue
 		}
-		f, err := conf.ParseFile(filename, src)
-		if err != nil {
-			t.Errorf("error parsing %s: %s", filename, err)
-			continue
-		}
 		sources[fi.Name()] = src
-		conf.CreateFromFiles(fi.Name(), f)
-	}
-
-	lprog, err := conf.Load()
-	if err != nil {
-		t.Fatalf("error loading program: %s", err)
+		// XXX load the files
+		// if _, err := lprog.CompileFiles(fi.Name(), []string{filename}); err != nil {
+		// 	t.Fatalf("error loading program: %s", err)
+		// }
 	}
 
 	for version, fis := range files {

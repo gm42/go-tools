@@ -315,9 +315,9 @@ func (c *Checker) Init(prog *lint.Program) {
 
 	deprecated := []map[types.Object]string{}
 	wg := &sync.WaitGroup{}
-	for _, pkginfo := range prog.Prog.AllPackages {
+	for _, pkginfo := range prog.Prog.Packages {
 		pkginfo := pkginfo
-		scope := pkginfo.Pkg.Scope()
+		scope := pkginfo.Scope()
 		names := scope.Names()
 		wg.Add(1)
 
@@ -2487,7 +2487,7 @@ func (c *Checker) CheckDeprecated(j *lint.Job) {
 		if obj.Pkg() == nil {
 			return true
 		}
-		nodePkg := j.NodePackage(node).Pkg
+		nodePkg := j.NodePackage(node).Package
 		if nodePkg == obj.Pkg() || obj.Pkg().Path()+"_test" == nodePkg.Path() {
 			// Don't flag stuff in our own package
 			return true

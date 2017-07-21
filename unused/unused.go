@@ -9,9 +9,9 @@ import (
 	"path/filepath"
 	"strings"
 
+	"honnef.co/go/tools/augur"
 	"honnef.co/go/tools/lint"
 
-	"golang.org/x/tools/go/loader"
 	"golang.org/x/tools/go/types/typeutil"
 )
 
@@ -154,7 +154,7 @@ type Checker struct {
 	graph *graph
 
 	msCache      typeutil.MethodSetCache
-	lprog        *loader.Program
+	lprog        *augur.Augur
 	topmostCache map[*types.Scope]*types.Scope
 	interfaces   []*types.Interface
 }
@@ -195,7 +195,7 @@ func (e Error) Error() string {
 	return fmt.Sprintf("errors in %d packages", len(e.Errors))
 }
 
-func (c *Checker) Check(lprog *loader.Program) []Unused {
+func (c *Checker) Check(lprog *augur.Augur) []Unused {
 	var unused []Unused
 	c.lprog = lprog
 	if c.WholeProgram {
@@ -243,7 +243,7 @@ func (c *Checker) Check(lprog *loader.Program) []Unused {
 		found := false
 		if !false {
 			for _, pkg := range c.lprog.InitialPackages() {
-				if pkg.Pkg == obj.Pkg() {
+				if pkg.Package == obj.Pkg() {
 					found = true
 					break
 				}
@@ -320,7 +320,7 @@ func (c *Checker) useExportedMethods(typ types.Type) {
 	}
 }
 
-func (c *Checker) processDefs(pkg *loader.PackageInfo) {
+func (c *Checker) processDefs(pkg *augur.Package) {
 	for _, obj := range pkg.Defs {
 		if obj == nil {
 			continue
@@ -370,8 +370,8 @@ func (c *Checker) processDefs(pkg *loader.PackageInfo) {
 			if obj.Name() == "_" {
 				node := c.graph.getNode(obj)
 				node.quiet = true
-				scope := c.topmostScope(pkg.Pkg.Scope().Innermost(obj.Pos()), pkg.Pkg)
-				if scope == pkg.Pkg.Scope() {
+				scope := c.topmostScope(pkg.Scope().Innermost(obj.Pos()), pkg.Package)
+				if scope == pkg.Scope() {
 					c.graph.roots = append(c.graph.roots, node)
 				} else {
 					c.graph.markUsedBy(obj, scope)
@@ -421,15 +421,15 @@ func (c *Checker) processDefs(pkg *loader.PackageInfo) {
 	}
 }
 
-func (c *Checker) processUses(pkg *loader.PackageInfo) {
+func (c *Checker) processUses(pkg *augur.Package) {
 	for ident, usedObj := range pkg.Uses {
 		if _, ok := usedObj.(*types.PkgName); ok {
 			continue
 		}
 		pos := ident.Pos()
-		scope := pkg.Pkg.Scope().Innermost(pos)
-		scope = c.topmostScope(scope, pkg.Pkg)
-		if scope != pkg.Pkg.Scope() {
+		scope := pkg.Scope().Innermost(pos)
+		scope = c.topmostScope(scope, pkg.Package)
+		if scope != pkg.Scope() {
 			c.graph.markUsedBy(usedObj, scope)
 		}
 
@@ -442,9 +442,9 @@ func (c *Checker) processUses(pkg *loader.PackageInfo) {
 
 func (c *Checker) findExportedInterfaces() {
 	c.interfaces = []*types.Interface{types.Universe.Lookup("error").Type().(*types.Named).Underlying().(*types.Interface)}
-	var pkgs []*loader.PackageInfo
+	var pkgs []*augur.Package
 	if c.WholeProgram {
-		for _, pkg := range c.lprog.AllPackages {
+		for _, pkg := range c.lprog.Packages {
 			pkgs = append(pkgs, pkg)
 		}
 	} else {
@@ -465,7 +465,7 @@ func (c *Checker) findExportedInterfaces() {
 	}
 }
 
-func (c *Checker) processTypes(pkg *loader.PackageInfo) {
+func (c *Checker) processTypes(pkg *augur.Package) {
 	named := map[*types.Named]*types.Pointer{}
 	var interfaces []*types.Interface
 	for _, tv := range pkg.Types {
@@ -485,7 +485,7 @@ func (c *Checker) processTypes(pkg *loader.PackageInfo) {
 				interfaces = append(interfaces, obj)
 			}
 		case *types.Struct:
-			if pkg.Pkg.Name() != "main" && !c.WholeProgram {
+			if pkg.Name() != "main" && !c.WholeProgram {
 				c.useExportedFields(obj)
 			}
 		}
@@ -540,10 +540,10 @@ func (c *Checker) processTypes(pkg *loader.PackageInfo) {
 	}
 }
 
-func (c *Checker) processSelections(pkg *loader.PackageInfo) {
+func (c *Checker) processSelections(pkg *augur.Package) {
 	fn := func(expr *ast.SelectorExpr, sel *types.Selection, offset int) {
-		scope := pkg.Pkg.Scope().Innermost(expr.Pos())
-		c.graph.markUsedBy(expr.X, c.topmostScope(scope, pkg.Pkg))
+		scope := pkg.Scope().Innermost(expr.Pos())
+		c.graph.markUsedBy(expr.X, c.topmostScope(scope, pkg.Package))
 		c.graph.markUsedBy(sel.Obj(), expr.X)
 		if len(sel.Index()) > 1 {
 			typ := sel.Recv()
@@ -574,7 +574,7 @@ func dereferenceType(typ types.Type) types.Type {
 }
 
 // processConversion marks fields as used if they're part of a type conversion.
-func (c *Checker) processConversion(pkg *loader.PackageInfo, node ast.Node) {
+func (c *Checker) processConversion(pkg *augur.Package, node ast.Node) {
 	if node, ok := node.(*ast.CallExpr); ok {
 		callTyp := pkg.TypeOf(node.Fun)
 		var typDst *types.Struct
@@ -632,7 +632,7 @@ func (c *Checker) processConversion(pkg *loader.PackageInfo, node ast.Node) {
 
 // processCompositeLiteral marks fields as used if the struct is used
 // in a composite literal.
-func (c *Checker) processCompositeLiteral(pkg *loader.PackageInfo, node ast.Node) {
+func (c *Checker) processCompositeLiteral(pkg *augur.Package, node ast.Node) {
 	// XXX how does this actually work? wouldn't it match t{}?
 	if node, ok := node.(*ast.CompositeLit); ok {
 		typ := pkg.TypeOf(node)
@@ -651,7 +651,7 @@ func (c *Checker) processCompositeLiteral(pkg *loader.PackageInfo, node ast.Node
 
 // processCgoExported marks functions as used if they're being
 // exported to cgo.
-func (c *Checker) processCgoExported(pkg *loader.PackageInfo, node ast.Node) {
+func (c *Checker) processCgoExported(pkg *augur.Package, node ast.Node) {
 	if node, ok := node.(*ast.FuncDecl); ok {
 		if node.Doc == nil {
 			return
@@ -666,7 +666,7 @@ func (c *Checker) processCgoExported(pkg *loader.PackageInfo, node ast.Node) {
 	}
 }
 
-func (c *Checker) processVariableDeclaration(pkg *loader.PackageInfo, node ast.Node) {
+func (c *Checker) processVariableDeclaration(pkg *augur.Package, node ast.Node) {
 	if decl, ok := node.(*ast.GenDecl); ok {
 		for _, spec := range decl.Specs {
 			spec, ok := spec.(*ast.ValueSpec)
@@ -694,7 +694,7 @@ func (c *Checker) processVariableDeclaration(pkg *loader.PackageInfo, node ast.N
 	}
 }
 
-func (c *Checker) processArrayConstants(pkg *loader.PackageInfo, node ast.Node) {
+func (c *Checker) processArrayConstants(pkg *augur.Package, node ast.Node) {
 	if decl, ok := node.(*ast.ArrayType); ok {
 		ident, ok := decl.Len.(*ast.Ident)
 		if !ok {
@@ -704,7 +704,7 @@ func (c *Checker) processArrayConstants(pkg *loader.PackageInfo, node ast.Node) 
 	}
 }
 
-func (c *Checker) processKnownReflectMethodCallers(pkg *loader.PackageInfo, node ast.Node) {
+func (c *Checker) processKnownReflectMethodCallers(pkg *augur.Package, node ast.Node) {
 	call, ok := node.(*ast.CallExpr)
 	if !ok {
 		return
@@ -747,7 +747,7 @@ func (c *Checker) processKnownReflectMethodCallers(pkg *loader.PackageInfo, node
 	}
 }
 
-func (c *Checker) processAST(pkg *loader.PackageInfo) {
+func (c *Checker) processAST(pkg *augur.Package) {
 	fn := func(node ast.Node) bool {
 		c.processConversion(pkg, node)
 		c.processKnownReflectMethodCallers(pkg, node)
