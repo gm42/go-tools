@@ -131,6 +131,9 @@ func (a *Augur) Compile(path string) (*Package, error) {
 
 func (a *Augur) markDirty(pkg *Package) {
 	pkg.dirty = true
+	if pkg.SSA != nil {
+		a.SSA.RemovePackage(pkg.SSA)
+	}
 	for rdep := range pkg.ReverseDependencies {
 		a.markDirty(a.Package(rdep))
 	}
@@ -163,13 +166,14 @@ func (a *Augur) compile(path string) (*Package, error) {
 	// OPT(dh): when compile gets called while rebuilding dirty
 	// packages, it is unnecessary to call markDirty. in fact, this
 	// causes exponential complexity.
-	a.markDirty(pkg)
 	if path == "unsafe" {
 		pkg.Package = types.Unsafe
 		a.Packages[path] = pkg
 		pkg.dirty = false
 		return pkg, nil
 	}
+
+	a.markDirty(pkg)
 
 	var err error
 	build, err := a.Build.Import(path, ".", 0)
@@ -195,17 +199,13 @@ func (a *Augur) compile(path string) (*Package, error) {
 	if err != nil {
 		return nil, err
 	}
-	prev := a.Packages[path]
 	a.Packages[path] = pkg
-	if prev != nil {
-		a.SSA.RemovePackage(prev.SSA)
-	}
 	pkg.SSA = a.SSA.CreatePackage(pkg.Package, pkg.Files, pkg.Info, true)
 	pkg.SSA.Build()
 
-	for _, imp := range build.Imports {
+	for _, imp := range pkg.Package.Imports() {
 		// FIXME(dh): support vendoring
-		dep := a.Package(imp)
+		dep := a.Package(imp.Path())
 		pkg.Dependencies[dep.Path()] = struct{}{}
 		dep.ReverseDependencies[pkg.Path()] = struct{}{}
 	}
