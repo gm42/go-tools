@@ -133,6 +133,7 @@ func (a *Program) Compile(path string) (*Package, error) {
 		return nil, err
 	}
 	pkg.Explicit = true
+	a.Packages[path] = pkg
 	return pkg, nil
 }
 
