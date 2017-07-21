@@ -9,6 +9,7 @@ import (
 	"go/types"
 	"log"
 	"path/filepath"
+	"strings"
 
 	"honnef.co/go/tools/ssa"
 )
@@ -62,6 +63,8 @@ type Augur struct {
 	Build    build.Context
 
 	checker *types.Config
+
+	logDepth int
 }
 
 func NewAugur() *Augur {
@@ -147,6 +150,8 @@ func (a *Augur) RecompileDirtyPackages() error {
 }
 
 func (a *Augur) compile(path string) (*Package, error) {
+	a.logDepth++
+	defer func() { a.logDepth-- }()
 	pkg := a.newPackage()
 	old, ok := a.Packages[path]
 	if ok {
@@ -154,7 +159,7 @@ func (a *Augur) compile(path string) (*Package, error) {
 		pkg.Explicit = old.Explicit
 	}
 
-	log.Println("compiling", path)
+	log.Printf("%scompiling %s", strings.Repeat("\t", a.logDepth), path)
 	// OPT(dh): when compile gets called while rebuilding dirty
 	// packages, it is unnecessary to call markDirty. in fact, this
 	// causes exponential complexity.
@@ -206,6 +211,5 @@ func (a *Augur) compile(path string) (*Package, error) {
 	}
 
 	pkg.dirty = false
-	log.Println("\tcompiled", path)
 	return pkg, nil
 }
