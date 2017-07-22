@@ -361,7 +361,7 @@ func tokenFileContainsPos(f *token.File, pos token.Pos) bool {
 	return base <= p && p < base+f.Size()
 }
 
-func pathEnclosingInterval(files []*ast.File, fset *token.FileSet, start, end token.Pos) (path []ast.Node, exact bool) {
+func pathEnclosingInterval(files map[*token.File]*ast.File, fset *token.FileSet, start, end token.Pos) (path []ast.Node, exact bool) {
 	for _, f := range files {
 		if f.Pos() == token.NoPos {
 			// This can happen if the parser saw
@@ -379,7 +379,7 @@ func pathEnclosingInterval(files []*ast.File, fset *token.FileSet, start, end to
 	return nil, false
 }
 
-func (c *Checker) deprecationMessage(files []*ast.File, fset *token.FileSet, obj types.Object) (message string) {
+func (c *Checker) deprecationMessage(files map[*token.File]*ast.File, fset *token.FileSet, obj types.Object) (message string) {
 	path, _ := pathEnclosingInterval(files, fset, obj.Pos(), obj.Pos())
 	if len(path) <= 2 {
 		return ""

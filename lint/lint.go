@@ -162,7 +162,9 @@ func (l *Linter) Lint(lprog *loader.Program) []Problem {
 		}
 	}
 	for _, pkg := range pkgs {
-		prog.Files = append(prog.Files, pkg.Files...)
+		for _, file := range pkg.Files {
+			prog.Files = append(prog.Files, file)
+		}
 
 		for _, f := range pkg.Files {
 			tf := lprog.Fset.File(f.Pos())

@@ -26,7 +26,7 @@ type Package struct {
 	*types.Package
 	*types.Info
 
-	Files []*ast.File
+	Files map[*token.File]*ast.File
 	SSA   *ssa.Package
 
 	Dependencies        map[string]struct{}
@@ -59,9 +59,10 @@ func (a *Program) newPackage() *Package {
 type Program struct {
 	Fset *token.FileSet
 	// Packages maps import paths to type-checked packages.
-	Packages map[string]*Package
-	SSA      *ssa.Program
-	Build    build.Context
+	Packages     map[string]*Package
+	TypePackages map[*types.Package]*Package
+	SSA          *ssa.Program
+	Build        build.Context
 
 	checker *types.Config
 
@@ -71,11 +72,12 @@ type Program struct {
 func NewProgram() *Program {
 	fset := token.NewFileSet()
 	a := &Program{
-		Fset:     fset,
-		Packages: map[string]*Package{},
-		SSA:      ssa.NewProgram(fset, ssa.GlobalDebug),
-		checker:  &types.Config{},
-		Build:    build.Default,
+		Fset:         fset,
+		Packages:     map[string]*Package{},
+		TypePackages: map[*types.Package]*Package{},
+		SSA:          ssa.NewProgram(fset, ssa.GlobalDebug),
+		checker:      &types.Config{},
+		Build:        build.Default,
 	}
 	a.checker.Importer = a
 	return a
@@ -111,6 +113,7 @@ func (a *Program) ImportFrom(path, srcDir string, mode types.ImportMode) (*types
 		return nil, err
 	}
 	a.Packages[bpkg.ImportPath] = pkg
+	a.TypePackages[pkg.Package] = pkg
 	return pkg.Package, nil
 }
 
@@ -174,6 +177,7 @@ func (a *Program) compile(path string, srcdir string) (*Package, error) {
 		pkg.ReverseDependencies = old.ReverseDependencies
 		pkg.Explicit = old.Explicit
 	}
+	delete(a.TypePackages, pkg.Package)
 
 	log.Printf("%scompiling %s", strings.Repeat("\t", a.logDepth), path)
 	// OPT(dh): when compile gets called while rebuilding dirty
@@ -196,7 +200,8 @@ func (a *Program) compile(path string, srcdir string) (*Package, error) {
 		return nil, errors.New("cgo is not currently supported")
 	}
 
-	pkg.Files = nil
+	pkg.Files = map[*token.File]*ast.File{}
+	var files []*ast.File
 	for _, f := range build.GoFiles {
 		// TODO(dh): cache parsed files and only reparse them if
 		// necessary
@@ -204,14 +209,16 @@ func (a *Program) compile(path string, srcdir string) (*Package, error) {
 		if err != nil {
 			return nil, err
 		}
-		pkg.Files = append(pkg.Files, af)
+		tf := a.Fset.File(af.Pos())
+		pkg.Files[tf] = af
+		files = append(files, af)
 	}
 
-	pkg.Package, err = a.checker.Check(path, a.Fset, pkg.Files, pkg.Info)
+	pkg.Package, err = a.checker.Check(path, a.Fset, files, pkg.Info)
 	if err != nil {
 		return nil, err
 	}
-	pkg.SSA = a.SSA.CreatePackage(pkg.Package, pkg.Files, pkg.Info, true)
+	pkg.SSA = a.SSA.CreatePackage(pkg.Package, files, pkg.Info, true)
 	pkg.SSA.Build()
 
 	for _, imp := range build.Imports {
