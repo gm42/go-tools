@@ -8,10 +8,11 @@ import (
 	"go/token"
 	"go/types"
 	"log"
-	"path/filepath"
 	"strings"
 
 	"honnef.co/go/tools/ssa"
+
+	"golang.org/x/tools/go/buildutil"
 )
 
 // FIXME(dh): when we reparse a package, new files get added to the
@@ -199,7 +200,7 @@ func (a *Program) compile(path string, srcdir string) (*Package, error) {
 	for _, f := range build.GoFiles {
 		// TODO(dh): cache parsed files and only reparse them if
 		// necessary
-		af, err := parser.ParseFile(a.Fset, filepath.Join(build.Dir, f), nil, parser.ParseComments)
+		af, err := buildutil.ParseFile(a.Fset, &a.Build, nil, build.Dir, f, parser.ParseComments)
 		if err != nil {
 			return nil, err
 		}
