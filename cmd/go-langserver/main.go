@@ -369,8 +369,49 @@ func (srv *Server) TextDocumentSymbol(params *lsp.DocumentSymbolParams) ([]lsp.S
 }
 
 func (srv *Server) TextDocumentHighlight(params *lsp.TextDocumentPositionParams) ([]lsp.DocumentHighlight, error) {
-
-	return nil, nil
+	pos, err := srv.position(params)
+	if err != nil {
+		log.Fatal(err)
+	}
+	path, _ := astutil.PathEnclosingInterval(pos.File, pos.Pos, pos.Pos)
+	ident, ok := path[0].(*ast.Ident)
+	if !ok {
+		return nil, nil
+	}
+	if ident.Obj == nil {
+		return nil, nil
+	}
+	obj := ident.Obj
+	var hls []lsp.DocumentHighlight
+	ast.Inspect(pos.File, func(node ast.Node) bool {
+		// OPT(dh): we could optimize this by starting the walk at the
+		// scope surrounding the identifier.
+		ident, ok := node.(*ast.Ident)
+		if !ok {
+			return true
+		}
+		if obj == ident.Obj {
+			pos := srv.lprog.Fset.Position(ident.Pos())
+			// TODO(dh): LSP differentiates between textual, read and
+			// write accesses to variables. right now we're reporting
+			// them all as textual matches.
+			hl := lsp.DocumentHighlight{
+				Range: lsp.Range{
+					Start: lsp.Position{
+						Line:      pos.Line - 1,
+						Character: pos.Column - 1,
+					},
+					End: lsp.Position{
+						Line:      pos.Line - 1,
+						Character: pos.Column + len(ident.Name) - 1,
+					},
+				},
+			}
+			hls = append(hls, hl)
+		}
+		return true
+	})
+	return hls, nil
 }
 
 func main() {
