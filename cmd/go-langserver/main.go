@@ -606,7 +606,11 @@ func main() {
 				srv.Error(msg, ret[1].Interface().(error), lsp.InternalError)
 				continue
 			}
-			srv.Respond(msg, ret[0].Interface())
+		}
+		if len(ret) > 0 {
+			if err := srv.Respond(msg, ret[0].Interface()); err != nil {
+				log.Println("error writing response:", err)
+			}
 		}
 	}
 }
