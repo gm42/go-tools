@@ -374,14 +374,20 @@ func (srv *Server) TextDocumentHighlight(params *lsp.TextDocumentPositionParams)
 		log.Fatal(err)
 	}
 	path, _ := astutil.PathEnclosingInterval(pos.File, pos.Pos, pos.Pos)
-	ident, ok := path[0].(*ast.Ident)
-	if !ok {
+	var ident *ast.Ident
+	switch node := path[0].(type) {
+	case *ast.Ident:
+		ident = node
+	case *ast.SelectorExpr:
+		ident = node.Sel
+	default:
 		return nil, nil
 	}
-	if ident.Obj == nil {
+	obj := pos.Pkg.ObjectOf(ident)
+	log.Println(ident, obj)
+	if obj == nil {
 		return nil, nil
 	}
-	obj := ident.Obj
 	var hls []lsp.DocumentHighlight
 	ast.Inspect(pos.File, func(node ast.Node) bool {
 		// OPT(dh): we could optimize this by starting the walk at the
@@ -390,7 +396,7 @@ func (srv *Server) TextDocumentHighlight(params *lsp.TextDocumentPositionParams)
 		if !ok {
 			return true
 		}
-		if obj == ident.Obj {
+		if obj == pos.Pkg.ObjectOf(ident) {
 			pos := srv.lprog.Fset.Position(ident.Pos())
 			// TODO(dh): LSP differentiates between textual, read and
 			// write accesses to variables. right now we're reporting
