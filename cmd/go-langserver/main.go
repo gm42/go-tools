@@ -103,10 +103,7 @@ func (srv *Server) position(params *lsp.TextDocumentPositionParams) (Position, e
 	if err != nil {
 		return Position{}, err
 	}
-	pkg, err := srv.lprog.Compile(bpkg.ImportPath)
-	if err != nil {
-		return Position{}, err
-	}
+	pkg := srv.lprog.Package(bpkg.ImportPath)
 	var tf *token.File
 	var af *ast.File
 	for _, af = range pkg.Files {
@@ -309,10 +306,7 @@ func (srv *Server) TextDocumentSymbol(params *lsp.DocumentSymbolParams) ([]lsp.S
 	if err != nil {
 		return nil, err
 	}
-	pkg, err := srv.lprog.Compile(bpkg.ImportPath)
-	if err != nil {
-		return nil, err
-	}
+	pkg := srv.lprog.Package(bpkg.ImportPath)
 
 	var info []lsp.SymbolInformation
 	type object interface {
@@ -508,12 +502,25 @@ func main() {
 				log.Fatal(err)
 			}
 			overlay[params.TextDocument.URI.Path] = []byte(params.TextDocument.Text)
+			if err != nil {
+				log.Fatal(err)
+			}
+			bpkg, err := buildutil.ContainingPackage(&srv.lprog.Build, ".", params.TextDocument.URI.Path)
+			if err != nil {
+				log.Fatal(err)
+			}
+			srv.lprog.Compile(bpkg.ImportPath)
 		case "textDocument/didChange":
 			params := &lsp.DidChangeTextDocumentParams{}
 			if err := json.Unmarshal(msg.Params, params); err != nil {
 				log.Fatal(err)
 			}
 			overlay[params.TextDocument.URI.Path] = []byte(params.ContentChanges[0].Text)
+			bpkg, err := buildutil.ContainingPackage(&srv.lprog.Build, ".", params.TextDocument.URI.Path)
+			if err != nil {
+				log.Fatal(err)
+			}
+			srv.lprog.Compile(bpkg.ImportPath)
 		case "textDocument/definition":
 			params := &lsp.TextDocumentPositionParams{}
 			if err := json.Unmarshal(msg.Params, params); err != nil {
