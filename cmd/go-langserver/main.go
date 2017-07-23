@@ -17,6 +17,7 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+	"unicode"
 
 	"honnef.co/go/spew"
 	"honnef.co/go/tools/loader"
@@ -127,11 +128,16 @@ func (srv *Server) TextDocumentDefinition(params *lsp.TextDocumentPositionParams
 		return nil, err
 	}
 
+	var node ast.Node
 	path, _ := astutil.PathEnclosingInterval(pos.File, pos.Pos, pos.Pos)
-	if len(path) == 0 {
-		return nil, nil
+	ident, ok := srv.identAtPosition(params)
+	if ok {
+		node = ident
+	} else {
+		node = path[0]
 	}
-	switch elem := path[0].(type) {
+
+	switch elem := node.(type) {
 	case *ast.BasicLit:
 		if len(path) < 2 {
 			break
@@ -368,23 +374,42 @@ func (srv *Server) TextDocumentSymbol(params *lsp.DocumentSymbolParams) ([]lsp.S
 	return info, nil
 }
 
+func (srv *Server) identAtPosition(params *lsp.TextDocumentPositionParams) (*ast.Ident, bool) {
+	pos, err := srv.position(params)
+	if err != nil {
+		log.Fatal(err)
+	}
+	f, err := buildutil.OpenFile(&srv.lprog.Build, params.TextDocument.URI.Path)
+	if err != nil {
+		log.Fatal(err)
+	}
+	data, err := ioutil.ReadAll(f)
+	f.Close()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	off := srv.lprog.Fset.File(pos.Pos).Offset(pos.Pos)
+	// XXX support non-ascii
+	if !unicode.IsLetter(rune(data[off])) && !unicode.IsDigit(rune(data[off])) {
+		pos.Pos--
+	}
+
+	path, _ := astutil.PathEnclosingInterval(pos.File, pos.Pos, pos.Pos)
+	ident, ok := path[0].(*ast.Ident)
+	return ident, ok
+}
+
 func (srv *Server) TextDocumentHighlight(params *lsp.TextDocumentPositionParams) ([]lsp.DocumentHighlight, error) {
 	pos, err := srv.position(params)
 	if err != nil {
 		log.Fatal(err)
 	}
-	path, _ := astutil.PathEnclosingInterval(pos.File, pos.Pos, pos.Pos)
-	var ident *ast.Ident
-	switch node := path[0].(type) {
-	case *ast.Ident:
-		ident = node
-	case *ast.SelectorExpr:
-		ident = node.Sel
-	default:
+	ident, ok := srv.identAtPosition(params)
+	if !ok {
 		return nil, nil
 	}
 	obj := pos.Pkg.ObjectOf(ident)
-	log.Println(ident, obj)
 	if obj == nil {
 		return nil, nil
 	}
