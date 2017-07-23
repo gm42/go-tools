@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"go/ast"
 	"go/build"
+	"go/scanner"
 	"go/token"
 	"go/types"
 	"io"
@@ -30,7 +31,7 @@ import (
 
 // TODO(dh): support non-ascii
 
-var debug, _ = os.Create("/tmp/out")
+var debug, _ = os.OpenFile("/tmp/out", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 
 type Server struct {
 	lprog *loader.Program
@@ -439,6 +440,66 @@ func (srv *Server) TextDocumentHighlight(params *lsp.TextDocumentPositionParams)
 	return hls, nil
 }
 
+func (srv *Server) compilePackage(filename string) {
+	bpkg, err := buildutil.ContainingPackage(&srv.lprog.Build, ".", filename)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+	_, err = srv.lprog.Compile(bpkg.ImportPath)
+	diags := []lsp.Diagnostic{}
+	switch err := err.(type) {
+	case loader.TypeErrors:
+		for _, err := range err {
+			pos := err.Fset.Position(err.Pos)
+			lsppos := lsp.Position{
+				Line:      pos.Line - 1,
+				Character: pos.Column - 1,
+			}
+			diag := lsp.Diagnostic{
+				Range: lsp.Range{
+					Start: lsppos,
+					End:   lsppos,
+				},
+				Severity: lsp.Error,
+				Source:   "compile",
+				Message:  err.Msg,
+			}
+			diags = append(diags, diag)
+		}
+	case scanner.ErrorList:
+		for _, err := range err {
+			lsppos := lsp.Position{
+				Line:      err.Pos.Line - 1,
+				Character: err.Pos.Column - 1,
+			}
+			diag := lsp.Diagnostic{
+				Range: lsp.Range{
+					Start: lsppos,
+					End:   lsppos,
+				},
+				Severity: lsp.Error,
+				Source:   "compile",
+				Message:  err.Msg,
+			}
+			diags = append(diags, diag)
+		}
+	case nil:
+	default:
+		log.Println(err)
+		return
+	}
+	// XXX handle assigning diags to files
+	params := lsp.PublishDiagnosticsParams{
+		URI: &lsp.URI{
+			Scheme: "file",
+			Path:   filename,
+		},
+		Diagnostics: diags,
+	}
+	srv.Notify("textDocument/publishDiagnostics", params)
+}
+
 func main() {
 	overlay := map[string][]byte{}
 
@@ -449,12 +510,6 @@ func main() {
 	}
 	r := io.TeeReader(os.Stdin, debug)
 	rw := bufio.NewReader(r)
-
-	defer func() {
-		if err := recover(); err != nil {
-			log.Println(err)
-		}
-	}()
 
 	srv := &Server{w: os.Stdout}
 	srv.lprog = loader.NewProgram()
@@ -505,22 +560,14 @@ func main() {
 			if err != nil {
 				log.Fatal(err)
 			}
-			bpkg, err := buildutil.ContainingPackage(&srv.lprog.Build, ".", params.TextDocument.URI.Path)
-			if err != nil {
-				log.Fatal(err)
-			}
-			srv.lprog.Compile(bpkg.ImportPath)
+			srv.compilePackage(params.TextDocument.URI.Path)
 		case "textDocument/didChange":
 			params := &lsp.DidChangeTextDocumentParams{}
 			if err := json.Unmarshal(msg.Params, params); err != nil {
 				log.Fatal(err)
 			}
 			overlay[params.TextDocument.URI.Path] = []byte(params.ContentChanges[0].Text)
-			bpkg, err := buildutil.ContainingPackage(&srv.lprog.Build, ".", params.TextDocument.URI.Path)
-			if err != nil {
-				log.Fatal(err)
-			}
-			srv.lprog.Compile(bpkg.ImportPath)
+			srv.compilePackage(params.TextDocument.URI.Path)
 		case "textDocument/definition":
 			params := &lsp.TextDocumentPositionParams{}
 			if err := json.Unmarshal(msg.Params, params); err != nil {
