@@ -65,8 +65,15 @@ type Program struct {
 	Build        build.Context
 
 	checker *types.Config
+	Errors  TypeErrors
 
 	logDepth int
+}
+
+type TypeErrors []types.Error
+
+func (TypeErrors) Error() string {
+	return "type errors"
 }
 
 func NewProgram() *Program {
@@ -80,6 +87,9 @@ func NewProgram() *Program {
 		Build:        build.Default,
 	}
 	a.checker.Importer = a
+	a.checker.Error = func(err error) {
+		a.Errors = append(a.Errors, err.(types.Error))
+	}
 	return a
 }
 
@@ -132,7 +142,11 @@ func (a *Program) Compile(path string) (*Package, error) {
 	//
 	// TODO(dh): remove stale reverse dependencies
 
+	a.Errors = nil
 	pkg, err := a.compile(path, ".")
+	if a.Errors != nil {
+		return nil, a.Errors
+	}
 	if err != nil {
 		return nil, err
 	}
