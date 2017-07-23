@@ -501,14 +501,12 @@ func (srv *Server) compilePackage(filename string) {
 }
 
 func main() {
-	overlay := map[string][]byte{}
-
-	os.Stderr = debug
-	log.SetOutput(debug)
 	if err := syscall.Dup2(int(debug.Fd()), 2); err != nil {
 		log.Fatal("dup failed:", err)
 	}
-	r := io.TeeReader(os.Stdin, debug)
+	overlay := map[string][]byte{}
+
+	r := io.TeeReader(os.Stdin, os.Stderr)
 	rw := bufio.NewReader(r)
 
 	srv := &Server{w: os.Stdout}
