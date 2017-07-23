@@ -16,6 +16,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"syscall"
 	"unicode"
@@ -34,8 +35,9 @@ import (
 var debug, _ = os.OpenFile("/tmp/out", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 
 type Server struct {
-	lprog *loader.Program
-	w     io.Writer
+	lprog   *loader.Program
+	w       io.Writer
+	overlay map[string][]byte
 }
 
 func (srv *Server) Notify(method string, v interface{}) error {
@@ -64,6 +66,28 @@ func (srv *Server) Respond(req *lsp.RequestMessage, resp interface{}) error {
 		},
 		ID:     req.ID,
 		Result: resp,
+	}
+	payload, err := json.Marshal(msg)
+	if err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(srv.w, "Content-Length: %d\r\n\r\n", len(payload)); err != nil {
+		return err
+	}
+	_, err = srv.w.Write(payload)
+	return err
+}
+
+func (srv *Server) Error(req *lsp.RequestMessage, err error, code int) error {
+	msg := lsp.ResponseMessage{
+		Message: lsp.Message{
+			JSONRPC: "2.0",
+		},
+		ID: req.ID,
+		Error: &lsp.ResponseError{
+			Code:    code,
+			Message: err.Error(),
+		},
 	}
 	payload, err := json.Marshal(msg)
 	if err != nil {
@@ -500,18 +524,44 @@ func (srv *Server) compilePackage(filename string) {
 	srv.Notify("textDocument/publishDiagnostics", params)
 }
 
+func (srv *Server) Initialize(params *lsp.InitializeParams) (*lsp.InitializeResult, error) {
+	return &lsp.InitializeResult{
+		Capabilities: lsp.ServerCapabilities{
+			TextDocumentSync:   lsp.SyncFull,
+			DefinitionProvider: true,
+			DocumentLinkProvider: lsp.DocumentLinkOptions{
+				ResolveProvider: false,
+			},
+			SignatureHelpProvider: lsp.SignatureHelpOptions{
+				TriggerCharacters: []string{"(", ","},
+			},
+			DocumentSymbolProvider:    true,
+			DocumentHighlightProvider: true,
+		}}, nil
+}
+
+func (srv *Server) TextDocumentDidOpen(params *lsp.DidOpenTextDocumentParams) {
+	srv.overlay[params.TextDocument.URI.Path] = []byte(params.TextDocument.Text)
+	srv.compilePackage(params.TextDocument.URI.Path)
+}
+
+func (srv *Server) TextDocumentDidChange(params *lsp.DidChangeTextDocumentParams) {
+	srv.overlay[params.TextDocument.URI.Path] = []byte(params.ContentChanges[0].Text)
+	srv.compilePackage(params.TextDocument.URI.Path)
+}
+
 func main() {
 	if err := syscall.Dup2(int(debug.Fd()), 2); err != nil {
 		log.Fatal("dup failed:", err)
 	}
-	overlay := map[string][]byte{}
 
 	r := io.TeeReader(os.Stdin, os.Stderr)
 	rw := bufio.NewReader(r)
 
 	srv := &Server{w: os.Stdout}
+	srv.overlay = map[string][]byte{}
 	srv.lprog = loader.NewProgram()
-	srv.lprog.Build = *buildutil.OverlayContext(&build.Default, overlay)
+	srv.lprog.Build = *buildutil.OverlayContext(&build.Default, srv.overlay)
 	// l := lint.Linter{
 	// 	Checker: staticcheck.NewChecker(),
 	// }
@@ -527,87 +577,36 @@ func main() {
 		if err := json.NewDecoder(rw).Decode(&msg); err != nil {
 			log.Fatal(err)
 		}
-		switch msg.Method {
-		case "initialize":
-			params := &lsp.InitializeParams{}
-			if err := json.Unmarshal(msg.Params, params); err != nil {
-				log.Fatal(err)
-			}
 
-			result := &lsp.InitializeResult{
-				Capabilities: lsp.ServerCapabilities{
-					TextDocumentSync:   lsp.SyncFull,
-					DefinitionProvider: true,
-					DocumentLinkProvider: lsp.DocumentLinkOptions{
-						ResolveProvider: false,
-					},
-					SignatureHelpProvider: lsp.SignatureHelpOptions{
-						TriggerCharacters: []string{"(", ","},
-					},
-					DocumentSymbolProvider:    true,
-					DocumentHighlightProvider: true,
-				},
+		handlers := map[string]interface{}{
+			"initialize":                     srv.Initialize,
+			"textDocument/didOpen":           srv.TextDocumentDidOpen,
+			"textDocument/didChange":         srv.TextDocumentDidChange,
+			"textDocument/definition":        srv.TextDocumentDefinition,
+			"textDocument/signatureHelp":     srv.TextDocumentSignatureHelp,
+			"textDocument/documentSymbol":    srv.TextDocumentSymbol,
+			"textDocument/documentHighlight": srv.TextDocumentHighlight,
+		}
+		fn := handlers[msg.Method]
+		if fn == nil {
+			srv.Error(msg, fmt.Errorf("method %s not found", msg.Method), lsp.MethodNotFound)
+			continue
+		}
+
+		T := reflect.TypeOf(fn)
+		v := reflect.ValueOf(fn)
+		arg := reflect.New(T.In(0).Elem())
+		if err := json.Unmarshal(msg.Params, arg.Interface()); err != nil {
+			srv.Error(msg, err, lsp.ParseError)
+			continue
+		}
+		ret := v.Call([]reflect.Value{arg})
+		if len(ret) == 2 {
+			if !ret[1].IsNil() {
+				srv.Error(msg, ret[1].Interface().(error), lsp.InternalError)
+				continue
 			}
-			srv.Respond(msg, result)
-		case "textDocument/didOpen":
-			params := &lsp.DidOpenTextDocumentParams{}
-			if err := json.Unmarshal(msg.Params, params); err != nil {
-				log.Fatal(err)
-			}
-			overlay[params.TextDocument.URI.Path] = []byte(params.TextDocument.Text)
-			if err != nil {
-				log.Fatal(err)
-			}
-			srv.compilePackage(params.TextDocument.URI.Path)
-		case "textDocument/didChange":
-			params := &lsp.DidChangeTextDocumentParams{}
-			if err := json.Unmarshal(msg.Params, params); err != nil {
-				log.Fatal(err)
-			}
-			overlay[params.TextDocument.URI.Path] = []byte(params.ContentChanges[0].Text)
-			srv.compilePackage(params.TextDocument.URI.Path)
-		case "textDocument/definition":
-			params := &lsp.TextDocumentPositionParams{}
-			if err := json.Unmarshal(msg.Params, params); err != nil {
-				log.Fatal(err)
-			}
-			resp, err := srv.TextDocumentDefinition(params)
-			if err != nil {
-				log.Fatal(err)
-			}
-			srv.Respond(msg, resp)
-		case "textDocument/signatureHelp":
-			params := &lsp.TextDocumentPositionParams{}
-			if err := json.Unmarshal(msg.Params, params); err != nil {
-				log.Fatal(err)
-			}
-			resp, err := srv.TextDocumentSignatureHelp(params)
-			if err != nil {
-				log.Fatal(err)
-			}
-			srv.Respond(msg, resp)
-		case "textDocument/documentSymbol":
-			params := &lsp.DocumentSymbolParams{}
-			if err := json.Unmarshal(msg.Params, params); err != nil {
-				log.Fatal(err)
-			}
-			resp, err := srv.TextDocumentSymbol(params)
-			if err != nil {
-				log.Fatal(err)
-			}
-			srv.Respond(msg, resp)
-		case "textDocument/documentHighlight":
-			params := &lsp.TextDocumentPositionParams{}
-			if err := json.Unmarshal(msg.Params, params); err != nil {
-				log.Fatal(err)
-			}
-			resp, err := srv.TextDocumentHighlight(params)
-			if err != nil {
-				log.Fatal(err)
-			}
-			srv.Respond(msg, resp)
-		case "textDocument/documentLink", "shutdown", "textDocument/codeLens":
-			srv.Respond(msg, nil)
+			srv.Respond(msg, ret[0].Interface())
 		}
 	}
 }
