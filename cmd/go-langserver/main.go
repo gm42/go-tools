@@ -21,7 +21,6 @@ import (
 	"syscall"
 	"unicode"
 
-	"honnef.co/go/spew"
 	"honnef.co/go/tools/loader"
 	"honnef.co/go/tools/lsp"
 	"honnef.co/go/tools/ssa"
@@ -71,7 +70,6 @@ func (srv *Server) Respond(req *lsp.RequestMessage, resp interface{}) error {
 	if err != nil {
 		return err
 	}
-	log.Printf("<-- %s", payload)
 	if _, err := fmt.Fprintf(srv.w, "Content-Length: %d\r\n\r\n", len(payload)); err != nil {
 		return err
 	}
@@ -80,7 +78,6 @@ func (srv *Server) Respond(req *lsp.RequestMessage, resp interface{}) error {
 }
 
 func (srv *Server) Error(req *lsp.RequestMessage, err error, code int) error {
-	log.Println("<-- ERROR:", err.Error())
 	msg := lsp.ResponseMessage{
 		Message: lsp.Message{
 			JSONRPC: "2.0",
@@ -192,7 +189,6 @@ func (srv *Server) TextDocumentDefinition(params *lsp.TextDocumentPositionParams
 			}
 			out = append(out, resp)
 		}
-		spew.Fdump(os.Stderr, out)
 		return out, nil
 	case *ast.Ident:
 		obj := pos.Pkg.ObjectOf(elem)
@@ -587,8 +583,6 @@ func (srv *Server) TextDocumentHover(params *lsp.TextDocumentPositionParams) (*l
 		return nil, nil
 	}
 
-	spew.Fdump(os.Stderr, doc)
-
 	return &lsp.Hover{
 		Contents: []lsp.MarkedString{
 			{
@@ -612,8 +606,7 @@ func main() {
 		log.Fatal("dup failed:", err)
 	}
 
-	r := io.TeeReader(os.Stdin, os.Stderr)
-	rw := bufio.NewReader(r)
+	rw := bufio.NewReader(os.Stdin)
 
 	srv := &Server{w: os.Stdout}
 	srv.overlay = map[string][]byte{}
