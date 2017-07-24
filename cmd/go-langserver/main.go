@@ -71,6 +71,7 @@ func (srv *Server) Respond(req *lsp.RequestMessage, resp interface{}) error {
 	if err != nil {
 		return err
 	}
+	log.Printf("<-- %s", payload)
 	if _, err := fmt.Fprintf(srv.w, "Content-Length: %d\r\n\r\n", len(payload)); err != nil {
 		return err
 	}
@@ -79,6 +80,7 @@ func (srv *Server) Respond(req *lsp.RequestMessage, resp interface{}) error {
 }
 
 func (srv *Server) Error(req *lsp.RequestMessage, err error, code int) error {
+	log.Println("<-- ERROR:", err.Error())
 	msg := lsp.ResponseMessage{
 		Message: lsp.Message{
 			JSONRPC: "2.0",
@@ -537,6 +539,7 @@ func (srv *Server) Initialize(params *lsp.InitializeParams) (*lsp.InitializeResu
 			},
 			DocumentSymbolProvider:    true,
 			DocumentHighlightProvider: true,
+			HoverProvider:             true,
 		}}, nil
 }
 
@@ -548,6 +551,60 @@ func (srv *Server) TextDocumentDidOpen(params *lsp.DidOpenTextDocumentParams) {
 func (srv *Server) TextDocumentDidChange(params *lsp.DidChangeTextDocumentParams) {
 	srv.overlay[params.TextDocument.URI.Path] = []byte(params.ContentChanges[0].Text)
 	srv.compilePackage(params.TextDocument.URI.Path)
+}
+
+func (srv *Server) TextDocumentHover(params *lsp.TextDocumentPositionParams) (*lsp.Hover, error) {
+	pos, err := srv.position(params)
+	if err != nil {
+		return nil, err
+	}
+
+	path, _ := astutil.PathEnclosingInterval(pos.File, pos.Pos, pos.Pos)
+	var doc *Doc
+	for _, node := range path {
+		switch i := node.(type) {
+		case *ast.ImportSpec:
+			abs := params.TextDocument.URI.Path
+			doc, err = PackageDoc(&srv.lprog.Build, srv.lprog.Fset, filepath.Dir(abs), ImportPath(i))
+			if err != nil {
+				return nil, err
+			}
+		case *ast.Ident:
+			// if we can't find the object denoted by the identifier, keep searching)
+			if obj := pos.Pkg.ObjectOf(i); obj == nil {
+				continue
+			}
+			doc, err = IdentDoc(&srv.lprog.Build, i, pos.Pkg, srv.lprog)
+			if err != nil {
+				return nil, err
+			}
+		default:
+			break
+		}
+	}
+
+	if doc == nil {
+		return nil, nil
+	}
+
+	spew.Fdump(os.Stderr, doc)
+
+	return &lsp.Hover{
+		Contents: []lsp.MarkedString{
+			{
+				Language: "go",
+				Value:    fmt.Sprintf("import %q", doc.Import),
+			},
+			{
+				Language: "go",
+				Value:    doc.Decl,
+			},
+			{
+				Language: "raw",
+				Value:    doc.Doc,
+			},
+		},
+	}, nil
 }
 
 func main() {
@@ -575,7 +632,11 @@ func main() {
 		}
 		msg := &lsp.RequestMessage{}
 		if err := json.NewDecoder(rw).Decode(&msg); err != nil {
-			log.Fatal(err)
+			if err == io.EOF {
+				break
+			}
+			srv.Error(msg, err, lsp.ParseError)
+			continue
 		}
 
 		handlers := map[string]interface{}{
@@ -586,6 +647,7 @@ func main() {
 			"textDocument/signatureHelp":     srv.TextDocumentSignatureHelp,
 			"textDocument/documentSymbol":    srv.TextDocumentSymbol,
 			"textDocument/documentHighlight": srv.TextDocumentHighlight,
+			"textDocument/hover":             srv.TextDocumentHover,
 		}
 		fn := handlers[msg.Method]
 		if fn == nil {
