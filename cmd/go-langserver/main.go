@@ -619,6 +619,7 @@ func main() {
 	srv.overlay = map[string][]byte{}
 	srv.lprog = loader.NewProgram()
 	srv.lprog.Build = *buildutil.OverlayContext(&build.Default, srv.overlay)
+	srv.lprog.Build.CgoEnabled = false
 	// l := lint.Linter{
 	// 	Checker: staticcheck.NewChecker(),
 	// }
