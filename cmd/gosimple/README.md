@@ -7,7 +7,7 @@ simplifying code.
 
 Gosimple requires Go 1.6 or later.
 
-    go get honnef.co/go/tools/cmd/gosimple
+    go get github.com/gm42/go-tools/cmd/gosimple
 
 ## Documentation
 

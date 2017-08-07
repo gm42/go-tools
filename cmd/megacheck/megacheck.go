@@ -1,14 +1,14 @@
 // megacheck runs staticcheck, gosimple and unused.
-package main // import "honnef.co/go/tools/cmd/megacheck"
+package main // import "github.com/gm42/go-tools/cmd/megacheck"
 
 import (
 	"os"
 
-	"honnef.co/go/tools/lint"
-	"honnef.co/go/tools/lint/lintutil"
-	"honnef.co/go/tools/simple"
-	"honnef.co/go/tools/staticcheck"
-	"honnef.co/go/tools/unused"
+	"github.com/gm42/go-tools/lint"
+	"github.com/gm42/go-tools/lint/lintutil"
+	"github.com/gm42/go-tools/simple"
+	"github.com/gm42/go-tools/staticcheck"
+	"github.com/gm42/go-tools/unused"
 )
 
 type Checker struct {

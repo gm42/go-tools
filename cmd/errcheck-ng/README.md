@@ -4,7 +4,7 @@ _errcheck-ng_ is the next generation of errcheck.
 
 ## Installation
 
-    go get honnef.co/go/tools/cmd/errcheck-ng
+    go get github.com/gm42/go-tools/cmd/errcheck-ng
 
 ## Usage
 

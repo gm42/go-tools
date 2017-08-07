@@ -3,7 +3,7 @@ package vrp
 import (
 	"fmt"
 
-	"honnef.co/go/tools/ssa"
+	"github.com/gm42/go-tools/ssa"
 )
 
 type ChannelInterval struct {

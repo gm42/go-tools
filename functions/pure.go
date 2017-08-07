@@ -4,8 +4,8 @@ import (
 	"go/token"
 	"go/types"
 
-	"honnef.co/go/tools/callgraph"
-	"honnef.co/go/tools/ssa"
+	"github.com/gm42/go-tools/callgraph"
+	"github.com/gm42/go-tools/ssa"
 )
 
 func (d *Descriptions) IsPure(fn *ssa.Function) bool {

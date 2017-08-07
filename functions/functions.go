@@ -4,10 +4,10 @@ import (
 	"go/types"
 	"sync"
 
-	"honnef.co/go/tools/callgraph"
-	"honnef.co/go/tools/callgraph/static"
-	"honnef.co/go/tools/ssa"
-	"honnef.co/go/tools/staticcheck/vrp"
+	"github.com/gm42/go-tools/callgraph"
+	"github.com/gm42/go-tools/callgraph/static"
+	"github.com/gm42/go-tools/ssa"
+	"github.com/gm42/go-tools/staticcheck/vrp"
 )
 
 var stdlibDescs = map[string]Description{

@@ -1,6 +1,6 @@
-# honnef.co/go/tools
+# github.com/gm42/go-tools
 
-`honnef.co/go/tools/...` is a collection of tools and libraries for
+`github.com/gm42/go-tools/...` is a collection of tools and libraries for
 working with Go code, including linters and static analysis.
 
 **These tools are supported by

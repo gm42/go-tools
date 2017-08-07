@@ -3,9 +3,9 @@ package errcheck
 import (
 	"go/types"
 
-	"honnef.co/go/tools/functions"
-	"honnef.co/go/tools/lint"
-	"honnef.co/go/tools/ssa"
+	"github.com/gm42/go-tools/functions"
+	"github.com/gm42/go-tools/lint"
+	"github.com/gm42/go-tools/ssa"
 )
 
 type Checker struct {

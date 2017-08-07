@@ -13,9 +13,9 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"honnef.co/go/tools/lint"
-	"honnef.co/go/tools/ssa"
-	"honnef.co/go/tools/staticcheck/vrp"
+	"github.com/gm42/go-tools/lint"
+	"github.com/gm42/go-tools/ssa"
+	"github.com/gm42/go-tools/staticcheck/vrp"
 )
 
 const (

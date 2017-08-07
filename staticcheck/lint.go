@@ -1,5 +1,5 @@
 // Package staticcheck contains a linter for Go source code.
-package staticcheck // import "honnef.co/go/tools/staticcheck"
+package staticcheck // import "github.com/gm42/go-tools/staticcheck"
 
 import (
 	"fmt"
@@ -16,12 +16,12 @@ import (
 	"sync"
 	texttemplate "text/template"
 
-	"honnef.co/go/tools/functions"
-	"honnef.co/go/tools/gcsizes"
-	"honnef.co/go/tools/internal/sharedcheck"
-	"honnef.co/go/tools/lint"
-	"honnef.co/go/tools/ssa"
-	"honnef.co/go/tools/staticcheck/vrp"
+	"github.com/gm42/go-tools/functions"
+	"github.com/gm42/go-tools/gcsizes"
+	"github.com/gm42/go-tools/internal/sharedcheck"
+	"github.com/gm42/go-tools/lint"
+	"github.com/gm42/go-tools/ssa"
+	"github.com/gm42/go-tools/staticcheck/vrp"
 
 	"golang.org/x/tools/go/ast/astutil"
 )
