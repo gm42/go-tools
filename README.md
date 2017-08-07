@@ -22,7 +22,7 @@ tool is accompanied by its own README, describing it in more detail.
 | [structlayout-pretty](cmd/structlayout-pretty)     | Formats the output of structlayout with ASCII art.               |
 | [unused](cmd/unused/)                              | Reports unused identifiers (types, functions, ...) in your code. |
 |                                                    |                                                                  |
-| [megacheck](cmd/megacheck)                         | Run staticcheck, gosimple and unused in one go                   |
+| [gochk](cmd/gochk)                                 | Run staticcheck, gosimple and unused in one go                   |
 
 ## Libraries
 

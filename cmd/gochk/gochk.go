@@ -1,5 +1,5 @@
-// megacheck runs staticcheck, gosimple and unused.
-package main // import "github.com/gm42/go-tools/cmd/megacheck"
+// gochk runs staticcheck, gosimple and unused.
+package main // import "github.com/gm42/go-tools/cmd/gochk"
 
 import (
 	"os"
@@ -53,7 +53,7 @@ func main() {
 			reflection   bool
 		}
 	}
-	fs := lintutil.FlagSet("megacheck")
+	fs := lintutil.FlagSet("gochk")
 	fs.BoolVar(&flags.gosimple.enabled,
 		"simple.enabled", true, "Run gosimple")
 	fs.BoolVar(&flags.gosimple.generated,
