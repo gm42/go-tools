@@ -1,13 +1,10 @@
 # github.com/gm42/go-tools
 
-`github.com/gm42/go-tools/...` is a collection of tools and libraries for
+`github.com/gm42/go-tools` is a collection of tools and libraries for
 working with Go code, including linters and static analysis.
 
-**These tools are supported by
-[patrons on Patreon](https://www.patreon.com/dominikh) and
-[sponsors](#sponsors). If you, too, would like to support the
-project's development, consider
-[becoming a patron](https://www.patreon.com/dominikh).**
+This is a fork of the original go-tools by **dominikh**, if you wish to support it go to [patrons on Patreon](https://www.patreon.com/dominikh);
+original project has a commercial version now with [commercial support](https://staticcheck.io/pricing).
 
 ## Tools
 
