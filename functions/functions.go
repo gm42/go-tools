@@ -6,8 +6,8 @@ import (
 
 	"github.com/gm42/go-tools/callgraph"
 	"github.com/gm42/go-tools/callgraph/static"
-	"github.com/gm42/go-tools/ssa"
 	"github.com/gm42/go-tools/staticcheck/vrp"
+	"golang.org/x/tools/go/ssa"
 )
 
 var stdlibDescs = map[string]Description{

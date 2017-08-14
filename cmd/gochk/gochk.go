@@ -54,15 +54,15 @@ func main() {
 		}
 	}
 	fs := lintutil.FlagSet("gochk")
-	fs.BoolVar(&flags.gosimple.enabled,
-		"simple.enabled", true, "Run gosimple")
-	fs.BoolVar(&flags.gosimple.generated,
-		"simple.generated", false, "Check generated code")
-
 	fs.BoolVar(&flags.staticcheck.enabled,
 		"staticcheck.enabled", true, "Run staticcheck")
 	fs.BoolVar(&flags.staticcheck.generated,
 		"staticcheck.generated", false, "Check generated code (only applies to a subset of checks)")
+
+	fs.BoolVar(&flags.gosimple.enabled,
+		"simple.enabled", true, "Run gosimple")
+	fs.BoolVar(&flags.gosimple.generated,
+		"simple.generated", false, "Check generated code")
 
 	fs.BoolVar(&flags.unused.enabled,
 		"unused.enabled", true, "Run unused")
@@ -84,16 +84,16 @@ func main() {
 
 	c := &Checker{}
 
-	if flags.staticcheck.enabled {
-		sac := staticcheck.NewChecker()
-		sac.CheckGenerated = flags.staticcheck.generated
-		c.Checkers = append(c.Checkers, sac)
-	}
-
 	if flags.gosimple.enabled {
 		sc := simple.NewChecker()
 		sc.CheckGenerated = flags.gosimple.generated
 		c.Checkers = append(c.Checkers, sc)
+	}
+
+	if flags.staticcheck.enabled {
+		sac := staticcheck.NewChecker()
+		sac.CheckGenerated = flags.staticcheck.generated
+		c.Checkers = append(c.Checkers, sac)
 	}
 
 	if flags.unused.enabled {

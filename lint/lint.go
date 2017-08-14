@@ -23,8 +23,8 @@ import (
 
 	"golang.org/x/tools/go/ast/astutil"
 	"golang.org/x/tools/go/loader"
-	"github.com/gm42/go-tools/ssa"
-	"github.com/gm42/go-tools/ssa/ssautil"
+	"golang.org/x/tools/go/ssa"
+	"golang.org/x/tools/go/ssa/ssautil"
 )
 
 type Job struct {
