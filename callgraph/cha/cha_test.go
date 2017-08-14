@@ -23,7 +23,7 @@ import (
 	"github.com/gm42/go-tools/callgraph"
 	"github.com/gm42/go-tools/callgraph/cha"
 	"golang.org/x/tools/go/loader"
-	"github.com/gm42/go-tools/ssa/ssautil"
+	"golang.org/x/tools/go/ssa/ssautil"
 )
 
 var inputs = []string{

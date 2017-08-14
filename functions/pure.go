@@ -5,7 +5,7 @@ import (
 	"go/types"
 
 	"github.com/gm42/go-tools/callgraph"
-	"github.com/gm42/go-tools/ssa"
+	"golang.org/x/tools/go/ssa"
 )
 
 func (d *Descriptions) IsPure(fn *ssa.Function) bool {

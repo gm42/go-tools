@@ -14,8 +14,8 @@ import (
 	"unicode/utf8"
 
 	"github.com/gm42/go-tools/lint"
-	"github.com/gm42/go-tools/ssa"
 	"github.com/gm42/go-tools/staticcheck/vrp"
+	"golang.org/x/tools/go/ssa"
 )
 
 const (

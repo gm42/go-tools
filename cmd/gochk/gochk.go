@@ -4,6 +4,7 @@ package main // import "github.com/gm42/go-tools/cmd/gochk"
 import (
 	"os"
 
+	"github.com/gm42/go-tools/golint"
 	"github.com/gm42/go-tools/lint"
 	"github.com/gm42/go-tools/lint/lintutil"
 	"github.com/gm42/go-tools/simple"
@@ -41,6 +42,9 @@ func main() {
 			enabled   bool
 			generated bool
 		}
+		golint struct {
+			enabled bool
+		}
 		unused struct {
 			enabled      bool
 			constants    bool
@@ -54,15 +58,18 @@ func main() {
 		}
 	}
 	fs := lintutil.FlagSet("gochk")
+	fs.BoolVar(&flags.staticcheck.enabled,
+		"staticcheck.enabled", true, "Run staticcheck")
+	fs.BoolVar(&flags.staticcheck.generated,
+		"staticcheck.generated", false, "Check generated code (only applies to a subset of checks)")
+
 	fs.BoolVar(&flags.gosimple.enabled,
 		"simple.enabled", true, "Run gosimple")
 	fs.BoolVar(&flags.gosimple.generated,
 		"simple.generated", false, "Check generated code")
 
-	fs.BoolVar(&flags.staticcheck.enabled,
-		"staticcheck.enabled", true, "Run staticcheck")
-	fs.BoolVar(&flags.staticcheck.generated,
-		"staticcheck.generated", false, "Check generated code (only applies to a subset of checks)")
+	fs.BoolVar(&flags.golint.enabled,
+		"lint.enabled", true, "Run golint")
 
 	fs.BoolVar(&flags.unused.enabled,
 		"unused.enabled", true, "Run unused")
@@ -84,16 +91,20 @@ func main() {
 
 	c := &Checker{}
 
+	if flags.gosimple.enabled {
+		sc := simple.NewChecker()
+		sc.CheckGenerated = flags.gosimple.generated
+		c.Checkers = append(c.Checkers, sc)
+	}
+
 	if flags.staticcheck.enabled {
 		sac := staticcheck.NewChecker()
 		sac.CheckGenerated = flags.staticcheck.generated
 		c.Checkers = append(c.Checkers, sac)
 	}
 
-	if flags.gosimple.enabled {
-		sc := simple.NewChecker()
-		sc.CheckGenerated = flags.gosimple.generated
-		c.Checkers = append(c.Checkers, sc)
+	if flags.golint.enabled {
+		c.Checkers = append(c.Checkers, golint.NewLintChecker())
 	}
 
 	if flags.unused.enabled {

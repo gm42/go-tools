@@ -6,6 +6,9 @@ working with Go code, including linters and static analysis.
 This is a fork of the original go-tools by **dominikh**, if you wish to support it go to [patrons on Patreon](https://www.patreon.com/dominikh);
 original project has a commercial version now with [commercial support](https://staticcheck.io/pricing).
 
+## Notable changes
+* uses as much as possible upstream tools packages (forked to add e-SSA)
+
 ## Tools
 
 All of the following tools can be found in the cmd/ directory. Each

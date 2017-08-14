@@ -27,8 +27,8 @@ import (
 	"go/types"
 
 	"github.com/gm42/go-tools/callgraph"
-	"github.com/gm42/go-tools/ssa"
-	"github.com/gm42/go-tools/ssa/ssautil"
+	"golang.org/x/tools/go/ssa"
+	"golang.org/x/tools/go/ssa/ssautil"
 	"golang.org/x/tools/go/types/typeutil"
 )
 
